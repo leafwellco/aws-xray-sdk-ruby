@@ -15,7 +15,7 @@ module XRay
         def record(transaction)
           payload = transaction.payload
           pool, conn = get_pool_n_conn(payload[:connection_id])
-  
+
           return if IGNORE_OPS.include?(payload[:name]) || pool.nil? || conn.nil?
           # The spec notation is Rails < 6.1, later this can be found in the db_config
           db_config = if pool.respond_to?(:spec)
@@ -28,9 +28,11 @@ module XRay
           subsegment = XRay.recorder.begin_subsegment name, namespace: 'remote'
           # subsegment is nil in case of context missing
           return if subsegment.nil?
-          subsegment.start_time = (transaction.time / 1000).to_f
+          # Rails 7.1 introduced time measurement in milliseconds instead seconds of causing xray-sdk to report wrong duration for transaction calls.
+          # This is being handled in rails 7.2 and later. https://github.com/rails/rails/pull/50779 
+          subsegment.start_time = (::Rails::VERSION::MAJOR == 7 and ::Rails::VERSION::MINOR == 1) ? transaction.time.to_f/1000 : transaction.time.to_f
           subsegment.sql = sql
-          XRay.recorder.end_subsegment end_time: (transaction.end / 1000).to_f
+          XRay.recorder.end_subsegment end_time: (::Rails::VERSION::MAJOR == 7 and ::Rails::VERSION::MINOR == 1) ? transaction.end.to_f/1000 : transaction.end.to_f
         end
 
         private
